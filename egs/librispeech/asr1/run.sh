@@ -9,7 +9,7 @@
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 # general configuration
 backend=pytorch
-stage=0       # start from -1 if you need to start from data download
+stage=4       # start from -1 if you need to start from data download
 stop_stage=100
 ngpu=8         # number of gpus ("0" uses cpu, otherwise use gpu)
 nj=32
