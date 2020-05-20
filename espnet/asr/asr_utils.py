@@ -576,19 +576,30 @@ def torch_resume(snapshot_path, trainer):
     d = NpzDeserializer(snapshot_dict["trainer"])
     d.load(trainer)
 
-    # restore model states
-    if hasattr(trainer.updater.model, "model"):
-        # (for TTS model)
-        if hasattr(trainer.updater.model.model, "module"):
-            trainer.updater.model.model.module.load_state_dict(snapshot_dict["model"])
+    try:
+
+        # restore model states
+        if hasattr(trainer.updater.model, "model"):
+            # (for TTS model)
+            if hasattr(trainer.updater.model.model, "module"):
+                trainer.updater.model.model.module.load_state_dict(snapshot_dict["model"])
+            else:
+                trainer.updater.model.model.load_state_dict(snapshot_dict["model"])
         else:
-            trainer.updater.model.model.load_state_dict(snapshot_dict["model"])
-    else:
-        # (for ASR model)
-        if hasattr(trainer.updater.model, "module"):
-            trainer.updater.model.module.load_state_dict(snapshot_dict["model"])
-        else:
-            trainer.updater.model.load_state_dict(snapshot_dict["model"], strict=False)
+            # (for ASR model)
+            if hasattr(trainer.updater.model, "module"):
+                trainer.updater.model.module.load_state_dict(snapshot_dict["model"])
+            else:
+                trainer.updater.model.load_state_dict(snapshot_dict["model"])
+    except:
+
+        model_dict = trainer.updater.model.state_dict()
+        pretrained_dict = snapshot_dict["model"]
+        # 1. filter out unnecessary keys
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() if
+                           k in model_dict and v.size() == model_dict[k].size()}
+
+        trainer.updater.model.load_state_dict(pretrained_dict)
 
     # retore optimizer states
     trainer.updater.get_optimizer("main").load_state_dict(snapshot_dict["optimizer"])
