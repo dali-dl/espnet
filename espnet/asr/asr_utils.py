@@ -591,6 +591,10 @@ def torch_resume(snapshot_path, trainer):
                 trainer.updater.model.module.load_state_dict(snapshot_dict["model"])
             else:
                 trainer.updater.model.load_state_dict(snapshot_dict["model"])
+
+        # retore optimizer states
+        trainer.updater.get_optimizer("main").load_state_dict(snapshot_dict["optimizer"])
+
     except:
 
         model_dict = trainer.updater.model.state_dict()
@@ -601,9 +605,6 @@ def torch_resume(snapshot_path, trainer):
 
         model_dict.update(pretrained_dict)
         trainer.updater.model.load_state_dict(model_dict)
-
-    # retore optimizer states
-    trainer.updater.get_optimizer("main").load_state_dict(snapshot_dict["optimizer"])
 
     # delete opened snapshot
     del snapshot_dict
