@@ -17,7 +17,7 @@ debugmode=1
 dumpdir=dump   # directory to dump full features
 N=0            # number of minibatches to be used (mainly for debugging). "0" uses all minibatches.
 verbose=0      # verbose option
-resume=        # Resume the training from snapshot
+resume=exp/train_100_espnet_pytorch_train_specaug/results/snapshot.ep.10        # Resume the training from snapshot
 
 # feature configuration
 do_delta=false

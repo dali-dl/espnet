@@ -578,6 +578,7 @@ def torch_resume(snapshot_path, trainer):
 
     try:
 
+        print('Loading the state dict using the official function!')
         # restore model states
         if hasattr(trainer.updater.model, "model"):
             # (for TTS model)
@@ -597,6 +598,7 @@ def torch_resume(snapshot_path, trainer):
 
     except:
 
+        print('Loading the state dict using the self-implemented function!')
         model_dict = trainer.updater.model.state_dict()
         pretrained_dict = snapshot_dict["model"]
         # 1. filter out unnecessary keys
