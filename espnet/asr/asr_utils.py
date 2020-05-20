@@ -599,7 +599,8 @@ def torch_resume(snapshot_path, trainer):
         pretrained_dict = {k: v for k, v in pretrained_dict.items() if
                            k in model_dict and v.size() == model_dict[k].size()}
 
-        trainer.updater.model.load_state_dict(pretrained_dict)
+        model_dict.update(pretrained_dict)
+        trainer.updater.model.load_state_dict(model_dict)
 
     # retore optimizer states
     trainer.updater.get_optimizer("main").load_state_dict(snapshot_dict["optimizer"])
