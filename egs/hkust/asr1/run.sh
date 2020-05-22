@@ -6,16 +6,17 @@
 . ./path.sh || exit 1;
 . ./cmd.sh || exit 1;
 
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 # general configuration
 backend=pytorch
 stage=0        # start from 0 if you need to start from data preparation
 stop_stage=100
-ngpu=1         # number of gpus ("0" uses cpu, otherwise use gpu)
+ngpu=8         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
 dumpdir=dump   # directory to dump full features
 N=0            # number of minibatches to be used (mainly for debugging). "0" uses all minibatches.
 verbose=0      # verbose option
-resume=        # Resume the training from snapshot
+resume=../../librispeech/asr1/exp/train_100_espnet_pytorch_train_specaug/results/snapshot.ep.99       # Resume the training from snapshot
 
 # feature configuration
 do_delta=false
@@ -33,8 +34,8 @@ recog_model=model.acc.best # set a model to be used for decoding: 'model.acc.bes
 n_average=10
 
 # data
-hkust1=/export/corpora/LDC/LDC2005S15/
-hkust2=/export/corpora/LDC/LDC2005T32/
+hkust1=~/Documents/data/corpora/LDC/LDC2005S15/
+hkust2=~/Documents/data/corpora/LDC/LDC2005T32/
 
 # exp tag
 tag="" # tag for managing experiments.
@@ -47,7 +48,8 @@ set -e
 set -u
 set -o pipefail
 
-train_set=train_nodup_sp
+#train_set=train_nodup_sp
+train_set=train_finetune_sp
 train_dev=train_dev
 recog_set="dev train_dev"
 
