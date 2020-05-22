@@ -9,8 +9,8 @@
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 # general configuration
 backend=pytorch
-stage=4        # start from 0 if you need to start from data preparation
-stop_stage=100
+stage=-1        # start from 0 if you need to start from data preparation
+stop_stage=0
 ngpu=8         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
 dumpdir=dump   # directory to dump full features
@@ -34,7 +34,7 @@ recog_model=model.acc.best # set a model to be used for decoding: 'model.acc.bes
 n_average=10
 
 # data
-data=~/Documents/data
+data=~/Documents/data/aishell_truncated
 data_url=www.openslr.org/resources/33
 
 # exp tag
