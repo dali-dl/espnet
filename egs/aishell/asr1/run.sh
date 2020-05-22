@@ -34,7 +34,7 @@ recog_model=model.acc.best # set a model to be used for decoding: 'model.acc.bes
 n_average=10
 
 # data
-data=~/Documents/data/aishell_truncated
+data=~/Documents/data/
 data_url=www.openslr.org/resources/33
 
 # exp tag
