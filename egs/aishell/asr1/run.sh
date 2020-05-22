@@ -9,14 +9,14 @@
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 # general configuration
 backend=pytorch
-stage=-1        # start from 0 if you need to start from data preparation
-stop_stage=0
+stage=0        # start from 0 if you need to start from data preparation
+stop_stage=100
 ngpu=8         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
 dumpdir=dump   # directory to dump full features
 N=0            # number of minibatches to be used (mainly for debugging). "0" uses all minibatches.
 verbose=0      # verbose option
-resume=exp/train_sp_pytorch_train/results/snapshot.ep.10        # Resume the training from snapshot
+resume=        # Resume the training from snapshot
 
 # feature configuration
 do_delta=false
@@ -48,7 +48,7 @@ set -e
 set -u
 set -o pipefail
 
-train_set=train_sp_finetune
+train_set=train_sp_truncated
 train_dev=dev
 recog_set="dev test"
 
