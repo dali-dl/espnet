@@ -765,7 +765,7 @@ def train(args):
         logging.info("resumed from %s" % args.resume)
         pretrain_state = torch_resume(args.resume, trainer)
 
-        if args.pgn:
+        if args.pgm:
             updater.set_pretrain(pretrain_state)
 
     # Evaluate the model with the test dataset for each epoch
