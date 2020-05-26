@@ -502,6 +502,9 @@ def get_parser(parser=None, required=True):
     )
     parser.add_argument("--fbank-fmin", type=float, default=0.0, help="")
     parser.add_argument("--fbank-fmax", type=float, default=None, help="")
+
+    parser.add_argument("--pgm", type=strtobool, default=False, help="")
+    parser.add_argument("--max-k", type=float, default=1.0, help="")
     return parser
 
 

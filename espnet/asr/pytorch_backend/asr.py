@@ -13,18 +13,21 @@ import math
 import os
 import sys
 
+import matplotlib
+import numpy as np
+import torch
 from chainer import reporter as reporter_module
 from chainer import training
 from chainer.training import extensions
 from chainer.training.updater import StandardUpdater
-import numpy as np
 from tensorboardX import SummaryWriter
-import torch
 from torch.nn.parallel import data_parallel
 
+import espnet.lm.pytorch_backend.extlm as extlm_pytorch
+import espnet.nets.pytorch_backend.lm.default as lm_pytorch
+from espnet.asr.asr_utils import CompareValueTrigger
 from espnet.asr.asr_utils import adadelta_eps_decay
 from espnet.asr.asr_utils import add_results_to_json
-from espnet.asr.asr_utils import CompareValueTrigger
 from espnet.asr.asr_utils import format_mulenc_args
 from espnet.asr.asr_utils import get_model_conf
 from espnet.asr.asr_utils import plot_spectrogram
@@ -35,10 +38,8 @@ from espnet.asr.asr_utils import torch_resume
 from espnet.asr.asr_utils import torch_snapshot
 from espnet.asr.pytorch_backend.asr_init import load_trained_model
 from espnet.asr.pytorch_backend.asr_init import load_trained_modules
-import espnet.lm.pytorch_backend.extlm as extlm_pytorch
 from espnet.nets.asr_interface import ASRInterface
 from espnet.nets.pytorch_backend.e2e_asr import pad_list
-import espnet.nets.pytorch_backend.lm.default as lm_pytorch
 from espnet.nets.pytorch_backend.streaming.segment import SegmentStreamingE2E
 from espnet.nets.pytorch_backend.streaming.window import WindowStreamingE2E
 from espnet.transform.spectrogram import IStft
@@ -55,8 +56,6 @@ from espnet.utils.training.iterators import ShufflingEnabler
 from espnet.utils.training.tensorboard_logger import TensorboardLogger
 from espnet.utils.training.train_utils import check_early_stop
 from espnet.utils.training.train_utils import set_early_stop
-
-import matplotlib
 
 matplotlib.use("Agg")
 
@@ -154,16 +153,16 @@ class CustomUpdater(StandardUpdater):
     """
 
     def __init__(
-        self,
-        model,
-        grad_clip_threshold,
-        train_iter,
-        optimizer,
-        device,
-        ngpu,
-        grad_noise=False,
-        accum_grad=1,
-        use_apex=False,
+            self,
+            model,
+            grad_clip_threshold,
+            train_iter,
+            optimizer,
+            device,
+            ngpu,
+            grad_noise=False,
+            accum_grad=1,
+            use_apex=False,
     ):
         super(CustomUpdater, self).__init__(train_iter, optimizer)
         self.model = model
@@ -236,6 +235,126 @@ class CustomUpdater(StandardUpdater):
         else:
             optimizer.step()
         optimizer.zero_grad()
+
+    def update(self):
+        self.update_core()
+        # #iterations with accum_grad > 1
+        # Ref.: https://github.com/espnet/espnet/issues/777
+        if self.forward_count == 0:
+            self.iteration += 1
+
+
+class CustomPGMUpdater(CustomUpdater):
+    def __init__(
+            self,
+            model,
+            grad_clip_threshold,
+            train_iter,
+            optimizer,
+            device,
+            ngpu,
+            grad_noise=False,
+            accum_grad=1,
+            use_apex=False,
+            max_k=1.0
+    ):
+        super(CustomPGMUpdater, self).__init__(
+            model,
+            grad_clip_threshold,
+            train_iter,
+            optimizer,
+            device,
+            ngpu,
+            grad_noise,
+            accum_grad,
+            use_apex)
+
+        self.pretrain = None
+        self.max_k = max_k
+
+    def set_pretrain(self, pretrain_state):
+        self.pretrain = pretrain_state
+
+    def lipschiz_constraint(self, w, w_pretrained, max_k):
+
+        axes = 0
+        if len(w.shape) == 4:
+            axes = [0, 1, 2]
+
+        t = w - w_pretrained
+        norms = torch.sum(torch.abs(t), dim=axes, keepdim=True)
+        t = t * (1.0 / torch.max(1.0, norms / max_k))
+        w = t + w_pretrained
+        return w
+
+    def pgm_update(self):
+        current_state = self.model.state_dict()
+        for k, v in current_state.items():
+            if k in self.pretrain and v.size() == self.pretrain[k].size():
+                w_ = self.lipschiz_constraint(v, self.pretrain[k], self.max_k)
+                v.data = w_.data
+
+    def update_core(self):
+        """Main update routine of the CustomUpdater."""
+        # When we pass one iterator and optimizer to StandardUpdater.__init__,
+        # they are automatically named 'main'.
+        train_iter = self.get_iterator("main")
+        optimizer = self.get_optimizer("main")
+        epoch = train_iter.epoch
+
+        # Get the next batch (a list of json files)
+        batch = train_iter.next()
+        # self.iteration += 1 # Increase may result in early report,
+        # which is done in other place automatically.
+        x = _recursive_to(batch, self.device)
+        is_new_epoch = train_iter.epoch != epoch
+        # When the last minibatch in the current epoch is given,
+        # gradient accumulation is turned off in order to evaluate the model
+        # on the validation set in every epoch.
+        # see details in https://github.com/espnet/espnet/pull/1388
+
+        # Compute the loss at this time step and accumulate it
+        if self.ngpu == 0:
+            loss = self.model(*x).mean() / self.accum_grad
+        else:
+            # apex does not support torch.nn.DataParallel
+            loss = (
+                data_parallel(self.model, x, range(self.ngpu)).mean() / self.accum_grad
+            )
+        if self.use_apex:
+            from apex import amp
+
+            # NOTE: for a compatibility with noam optimizer
+            opt = optimizer.optimizer if hasattr(optimizer, "optimizer") else optimizer
+            with amp.scale_loss(loss, opt) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            loss.backward()
+        # gradient noise injection
+        if self.grad_noise:
+            from espnet.asr.asr_utils import add_gradient_noise
+
+            add_gradient_noise(
+                self.model, self.iteration, duration=100, eta=1.0, scale_factor=0.55
+            )
+
+        # update parameters
+        self.forward_count += 1
+        if not is_new_epoch and self.forward_count != self.accum_grad:
+            return
+        self.forward_count = 0
+        # compute the gradient norm to check if it is normal or not
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            self.model.parameters(), self.grad_clip_threshold
+        )
+        logging.info("grad norm={}".format(grad_norm))
+        if math.isnan(grad_norm):
+            logging.warning("grad norm is nan. Do not update model.")
+        else:
+            optimizer.step()
+        optimizer.zero_grad()
+
+        self.pgm_update()
 
     def update(self):
         self.update_core()
@@ -608,17 +727,31 @@ def train(args):
     )
 
     # Set up a trainer
-    updater = CustomUpdater(
-        model,
-        args.grad_clip,
-        {"main": train_iter},
-        optimizer,
-        device,
-        args.ngpu,
-        args.grad_noise,
-        args.accum_grad,
-        use_apex=use_apex,
-    )
+    if args.pgm:
+        updater = CustomPGMUpdater(
+            model,
+            args.grad_clip,
+            {"main": train_iter},
+            optimizer,
+            device,
+            args.ngpu,
+            args.grad_noise,
+            args.accum_grad,
+            use_apex=use_apex,
+            max_k=args.max_k
+        )
+    else:
+        updater = CustomUpdater(
+            model,
+            args.grad_clip,
+            {"main": train_iter},
+            optimizer,
+            device,
+            args.ngpu,
+            args.grad_noise,
+            args.accum_grad,
+            use_apex=use_apex,
+        )
     trainer = training.Trainer(updater, (args.epochs, "epoch"), out=args.outdir)
 
     if use_sortagrad:
@@ -630,7 +763,10 @@ def train(args):
     # Resume from a snapshot
     if args.resume:
         logging.info("resumed from %s" % args.resume)
-        torch_resume(args.resume, trainer)
+        pretrain_state = torch_resume(args.resume, trainer)
+
+        if args.pgn:
+            updater.set_pretrain(pretrain_state)
 
     # Evaluate the model with the test dataset for each epoch
     if args.save_interval_iters > 0:
@@ -671,11 +807,11 @@ def train(args):
     # Make a plot for training and validation values
     if args.num_encs > 1:
         report_keys_loss_ctc = [
-            "main/loss_ctc{}".format(i + 1) for i in range(model.num_encs)
-        ] + ["validation/main/loss_ctc{}".format(i + 1) for i in range(model.num_encs)]
+                                   "main/loss_ctc{}".format(i + 1) for i in range(model.num_encs)
+                               ] + ["validation/main/loss_ctc{}".format(i + 1) for i in range(model.num_encs)]
         report_keys_cer_ctc = [
-            "main/cer_ctc{}".format(i + 1) for i in range(model.num_encs)
-        ] + ["validation/main/cer_ctc{}".format(i + 1) for i in range(model.num_encs)]
+                                  "main/cer_ctc{}".format(i + 1) for i in range(model.num_encs)
+                              ] + ["validation/main/cer_ctc{}".format(i + 1) for i in range(model.num_encs)]
     trainer.extend(
         extensions.PlotReport(
             [
@@ -767,20 +903,20 @@ def train(args):
         extensions.LogReport(trigger=(args.report_interval_iters, "iteration"))
     )
     report_keys = [
-        "epoch",
-        "iteration",
-        "main/loss",
-        "main/loss_ctc",
-        "main/loss_att",
-        "validation/main/loss",
-        "validation/main/loss_ctc",
-        "validation/main/loss_att",
-        "main/acc",
-        "validation/main/acc",
-        "main/cer_ctc",
-        "validation/main/cer_ctc",
-        "elapsed_time",
-    ] + ([] if args.num_encs == 1 else report_keys_cer_ctc + report_keys_loss_ctc)
+                      "epoch",
+                      "iteration",
+                      "main/loss",
+                      "main/loss_ctc",
+                      "main/loss_att",
+                      "validation/main/loss",
+                      "validation/main/loss_ctc",
+                      "validation/main/loss_att",
+                      "main/acc",
+                      "validation/main/acc",
+                      "main/cer_ctc",
+                      "validation/main/cer_ctc",
+                      "elapsed_time",
+                  ] + ([] if args.num_encs == 1 else report_keys_cer_ctc + report_keys_loss_ctc)
     if args.opt == "adadelta":
         trainer.extend(
             extensions.observe_value(
@@ -921,7 +1057,7 @@ def recog(args):
                         logging.info(
                             "Feeding frames %d - %d", i, i + args.streaming_window
                         )
-                        se2e.accept_input(feat[i : i + args.streaming_window])
+                        se2e.accept_input(feat[i: i + args.streaming_window])
                     logging.info("Running offline attention decoder")
                     se2e.decode_with_attention_offline()
                     logging.info("Offline attention decoder finished")
@@ -937,7 +1073,7 @@ def recog(args):
                     se2e = SegmentStreamingE2E(e2e=model, recog_args=args, rnnlm=rnnlm)
                     r = np.prod(model.subsample)
                     for i in range(0, feat.shape[0], r):
-                        hyps = se2e.accept_input(feat[i : i + r])
+                        hyps = se2e.accept_input(feat[i: i + r])
                         if hyps is not None:
                             text = "".join(
                                 [
@@ -997,7 +1133,7 @@ def recog(args):
                     se2e = SegmentStreamingE2E(e2e=model, recog_args=args, rnnlm=rnnlm)
                     r = np.prod(model.subsample)
                     for i in range(0, feat.shape[0], r):
-                        hyps = se2e.accept_input(feat[i : i + r])
+                        hyps = se2e.accept_input(feat[i: i + r])
                         if hyps is not None:
                             text = "".join(
                                 [
@@ -1238,8 +1374,8 @@ def enhance(args):
                         enh = enh[: len(org_feats[idx])]
                     elif len(org_feats) > len(enh):
                         padwidth = [(0, (len(org_feats[idx]) - len(enh)))] + [
-                            (0, 0)
-                        ] * (enh.ndim - 1)
+                                                                                 (0, 0)
+                                                                             ] * (enh.ndim - 1)
                         enh = np.pad(enh, padwidth, mode="constant")
 
                 if args.enh_filetype in ("sound", "sound.hdf5"):

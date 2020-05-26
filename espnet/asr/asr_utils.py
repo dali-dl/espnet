@@ -609,7 +609,7 @@ def torch_resume(snapshot_path, trainer):
         trainer.updater.model.load_state_dict(model_dict)
 
     # delete opened snapshot
-    del snapshot_dict
+    return snapshot_dict["model"]
 
 
 # * ------------------ recognition related ------------------ *
