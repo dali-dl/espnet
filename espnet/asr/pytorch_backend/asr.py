@@ -281,7 +281,7 @@ class CustomPGMUpdater(CustomUpdater):
         if len(w.shape) == 4:
             axes = [0, 1, 2]
 
-        t = w - w_pretrained
+        t = w - w_pretrained.cuda()
         norms = torch.sum(torch.abs(t), dim=axes, keepdim=True)
         t = t * (1.0 / torch.max(1.0, norms / max_k))
         w = t + w_pretrained
