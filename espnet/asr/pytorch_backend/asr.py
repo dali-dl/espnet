@@ -292,7 +292,9 @@ class CustomPGMUpdater(CustomUpdater):
         for k, v in current_state.items():
             if k in self.pretrain and v.size() == self.pretrain[k].size():
                 w_ = self.lipschiz_constraint(v, self.pretrain[k], self.max_k)
-                v.data = w_.data
+                current_state[k] = w_
+
+        self.model.load_state_dict(current_state)
 
     def update_core(self):
         """Main update routine of the CustomUpdater."""
@@ -728,6 +730,7 @@ def train(args):
 
     # Set up a trainer
     if args.pgm:
+        print("using project gradient method")
         updater = CustomPGMUpdater(
             model,
             args.grad_clip,
@@ -766,6 +769,7 @@ def train(args):
         pretrain_state = torch_resume(args.resume, trainer)
 
         if args.pgm:
+            print("set pretrained state dict")
             updater.set_pretrain(pretrain_state)
 
     # Evaluate the model with the test dataset for each epoch
