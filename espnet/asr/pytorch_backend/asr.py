@@ -288,6 +288,8 @@ class CustomPGMUpdater(CustomUpdater):
         return w
 
     def pgm_update(self):
+        import pdb
+        pdb.set_trace()
         current_state = self.model.state_dict()
         for k, v in current_state.items():
             if k in self.pretrain and v.size() == self.pretrain[k].size():
