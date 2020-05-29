@@ -40,6 +40,6 @@ transformer-length-normalized-loss: false
 transformer-init: pytorch
 
 #pgm fine tune
-pgm: True
+pgm: False
 max-k: 1e-4
 
