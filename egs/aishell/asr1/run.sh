@@ -48,7 +48,7 @@ set -e
 set -u
 set -o pipefail
 
-train_set=train_sp_train_ondev_ftibri_pgm
+train_set=train_sp_train_ondev_ftflibri_pgm
 train_dev=dev
 recog_set="dev test"
 
