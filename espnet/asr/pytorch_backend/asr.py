@@ -281,7 +281,7 @@ class CustomPGMUpdater(CustomUpdater):
         if len(w.shape) == 4:
             axes = [0, 1, 2]
 
-        if w_pretrained != 0:
+        if w_pretrained is not None:
             t = w - w_pretrained.cuda()
         else:
             t = w
@@ -290,7 +290,7 @@ class CustomPGMUpdater(CustomUpdater):
         # print(norms.sum().item())
         t = t * (1.0 / torch.max(torch.ones_like(norms), norms / max_k))
 
-        if w_pretrained != 0:
+        if w_pretrained is not None:
             w = t + w_pretrained.cuda()
         else:
             w = t
@@ -304,7 +304,7 @@ class CustomPGMUpdater(CustomUpdater):
                 w_ = self.lipschiz_constraint(v, self.pretrain[k], self.max_k)
                 current_state[k] = w_
             else:
-                w_ = self.lipschiz_constraint(v, 0, self.max_k)
+                w_ = self.lipschiz_constraint(v, None, self.max_k)
                 current_state[k] = w_
 
         self.model.load_state_dict(current_state)
