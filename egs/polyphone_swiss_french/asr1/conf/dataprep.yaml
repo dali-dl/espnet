@@ -1,10 +1,10 @@
 # the default corpus as provided by ELRA should be
 # unpacked to this location.
-download_dir: "downloads/fr-CH_Polyphone"
+download_dir: "~/Documents/data/polyphone_swiss_french/fr-CH_Polyphone"
 
 # first all data in the corpus is organized
 # splits are later made from this
-trans_file: "downloads/all_data.trans"
+trans_file: "~/Documents/data/polyphone_swiss_french/all_data.trans"
 fbank_conf: "conf/fbank.conf"
 datadir: "data"
 train: "valid_train"
