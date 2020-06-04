@@ -41,5 +41,5 @@ transformer-init: pytorch
 
 #pgm fine tune
 pgm: True
-max-k: 1e-3
+max-k: 1e-2
 
