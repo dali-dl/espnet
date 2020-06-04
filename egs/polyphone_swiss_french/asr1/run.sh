@@ -5,6 +5,7 @@
 
 . ./path.sh || exit 1;
 . ./cmd.sh || exit 1;
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 # general configuration
 backend=pytorch
