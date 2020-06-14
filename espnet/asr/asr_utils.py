@@ -7,7 +7,6 @@ import argparse
 import copy
 import json
 import logging
-
 # matplotlib related
 import os
 import shutil
@@ -15,17 +14,14 @@ import tempfile
 
 # chainer related
 import chainer
-
-from chainer import training
-from chainer.training import extension
-
-from chainer.serializers.npz import DictionarySerializer
-from chainer.serializers.npz import NpzDeserializer
-
 # io related
 import matplotlib
 import numpy as np
 import torch
+from chainer import training
+from chainer.serializers.npz import DictionarySerializer
+from chainer.serializers.npz import NpzDeserializer
+from chainer.training import extension
 
 matplotlib.use("Agg")
 
@@ -98,18 +94,18 @@ class PlotAttentionReport(extension.Extension):
     """
 
     def __init__(
-        self,
-        att_vis_fn,
-        data,
-        outdir,
-        converter,
-        transform,
-        device,
-        reverse=False,
-        ikey="input",
-        iaxis=0,
-        okey="output",
-        oaxis=0,
+            self,
+            att_vis_fn,
+            data,
+            outdir,
+            converter,
+            transform,
+            device,
+            reverse=False,
+            ikey="input",
+            iaxis=0,
+            okey="output",
+            oaxis=0,
     ):
         self.att_vis_fn = att_vis_fn
         self.data = copy.deepcopy(data)
@@ -601,15 +597,16 @@ def torch_resume(snapshot_path, trainer):
         print('Loading the state dict using the self-implemented function!')
         model_dict = trainer.updater.model.state_dict()
         pretrained_dict = snapshot_dict["model"]
+        updated_dict = {}
         init_none = {}
         # 1. filter out unnecessary keys
-        for k, v in pretrained_dict.items():
-            if k in model_dict and v.size() == model_dict[k].size():
-                pretrained_dict = {k: v}
+        for k, v in model_dict.items():
+            if k in pretrained_dict and v.size() == pretrained_dict[k].size():
+                updated_dict[k] = v
             else:
                 init_none[v] = None
 
-        model_dict.update(pretrained_dict)
+        model_dict.update(updated_dict)
         trainer.updater.model.load_state_dict(model_dict)
 
     # delete opened snapshot
@@ -692,20 +689,20 @@ def add_results_to_json(js, nbest_hyps, char_list):
 
 
 def plot_spectrogram(
-    plt,
-    spec,
-    mode="db",
-    fs=None,
-    frame_shift=None,
-    bottom=True,
-    left=True,
-    right=True,
-    top=False,
-    labelbottom=True,
-    labelleft=True,
-    labelright=True,
-    labeltop=False,
-    cmap="inferno",
+        plt,
+        spec,
+        mode="db",
+        fs=None,
+        frame_shift=None,
+        bottom=True,
+        left=True,
+        right=True,
+        top=False,
+        labelbottom=True,
+        labelleft=True,
+        labelright=True,
+        labeltop=False,
+        cmap="inferno",
 ):
     """Plot spectrogram using matplotlib.
 
