@@ -601,15 +601,19 @@ def torch_resume(snapshot_path, trainer):
         print('Loading the state dict using the self-implemented function!')
         model_dict = trainer.updater.model.state_dict()
         pretrained_dict = snapshot_dict["model"]
+        init_none = {}
         # 1. filter out unnecessary keys
-        pretrained_dict = {k: v for k, v in pretrained_dict.items() if
-                           k in model_dict and v.size() == model_dict[k].size()}
+        for k, v in pretrained_dict.items():
+            if k in model_dict and v.size() == model_dict[k].size():
+                pretrained_dict = {k: v}
+            else:
+                init_none[v] = None
 
         model_dict.update(pretrained_dict)
         trainer.updater.model.load_state_dict(model_dict)
 
     # delete opened snapshot
-    return snapshot_dict["model"]
+    return init_none
 
 
 # * ------------------ recognition related ------------------ *

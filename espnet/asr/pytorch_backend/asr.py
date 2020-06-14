@@ -21,6 +21,7 @@ from chainer import training
 from chainer.training import extensions
 from chainer.training.updater import StandardUpdater
 from tensorboardX import SummaryWriter
+from torch import nn
 from torch.nn.parallel import data_parallel
 
 import espnet.lm.pytorch_backend.extlm as extlm_pytorch
@@ -256,7 +257,8 @@ class CustomPGMUpdater(CustomUpdater):
             grad_noise=False,
             accum_grad=1,
             use_apex=False,
-            max_k=1.0
+            max_k=1.0,
+            linf=True
     ):
         super(CustomPGMUpdater, self).__init__(
             model,
@@ -271,11 +273,24 @@ class CustomPGMUpdater(CustomUpdater):
 
         self.pretrain = None
         self.max_k = max_k
+        self.linf = linf
 
-    def set_pretrain(self, pretrain_state):
-        self.pretrain = pretrain_state
+    def cache_init(self):
 
-    def lipschiz_constraint(self, w, w_pretrained, max_k):
+        self.pretrain = {}
+        for idx, m in enumerate(self.model.modules()):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.Linear):
+                self.pretrain[idx] = m
+                if m.weight in self.init_none.keys():
+                    self.pretrain[idx] = None
+
+    def set_init_none(self, init_none):
+        self.init_none = init_none
+
+    def lipschiz_constraint(self, w, w_pretrained):
+
+        def _frob_norm(w):
+            return torch.sum(torch.pow(w, 2.0), keepdims=False)
 
         axes = 0
         if len(w.shape) == 4:
@@ -286,9 +301,12 @@ class CustomPGMUpdater(CustomUpdater):
         else:
             t = w
 
-        norms = torch.sum(torch.abs(t), dim=axes, keepdim=True)
-        # print(norms.sum().item())
-        t = t * (1.0 / torch.max(torch.ones_like(norms), norms / max_k))
+        if self.linf:
+            norms = torch.sum(torch.abs(t), dim=axes, keepdim=True)
+            t = t * (1.0 / torch.max(torch.ones_like(norms), norms / self.max_k))
+        else:
+            norm = torch.sqrt(_frob_norm(t))
+            t = t * (1.0 / torch.max(torch.ones_like(norm), norm / self.max_k))
 
         if w_pretrained is not None:
             w = t + w_pretrained.cuda()
@@ -297,17 +315,29 @@ class CustomPGMUpdater(CustomUpdater):
 
         return w
 
-    def pgm_update(self):
-        current_state = self.model.state_dict()
-        for k, v in current_state.items():
-            if k in self.pretrain and v.size() == self.pretrain[k].size():
-                w_ = self.lipschiz_constraint(v, self.pretrain[k], self.max_k)
-                current_state[k] = w_
-            else:
-                w_ = self.lipschiz_constraint(v, None, self.max_k)
-                current_state[k] = w_
+    def bn_lipschitz_constraint(self, w, variance, pre_layer):
 
-        self.model.load_state_dict(current_state)
+        diag = w / torch.sqrt(variance + 1e-6)
+
+        if pre_layer is not None:
+            zero_diag = (pre_layer.weight / torch.sqrt(pre_layer.running_var + 1e-6))
+            t = diag - zero_diag
+        else:
+            t = diag
+
+        v = t * (1.0 / torch.max(torch.ones_like(t), torch.abs(t) / self.max_k))
+
+        if pre_layer is not None:
+            return (v + zero_diag) * torch.sqrt(variance + 1e-6)
+        else:
+            return v * torch.sqrt(variance + 1e-6)
+
+    def pgm_update(self):
+        for idx, m in enumerate(self.model.modules()):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                self.lipschiz_constraint(m.weight, self.pretrain[idx])
+            elif isinstance(m, nn.BatchNorm2d):
+                self.bn_lipschitz_constraint(m.weight, m.running_var, self.pretrain[idx])
 
     def update_core(self):
         """Main update routine of the CustomUpdater."""
@@ -754,7 +784,7 @@ def train(args):
             args.grad_noise,
             args.accum_grad,
             use_apex=use_apex,
-            max_k=args.max_k
+            max_k=args.max_k,
         )
     else:
         updater = CustomUpdater(
@@ -779,11 +809,12 @@ def train(args):
     # Resume from a snapshot
     if args.resume:
         logging.info("resumed from %s" % args.resume)
-        pretrain_state = torch_resume(args.resume, trainer)
+        init_none = torch_resume(args.resume, trainer)
 
         if args.pgm:
             print("set pretrained state dict")
-            updater.set_pretrain(pretrain_state)
+            updater.set_init_none(init_none)
+            updater.cache_init()
 
     # Evaluate the model with the test dataset for each epoch
     if args.save_interval_iters > 0:
