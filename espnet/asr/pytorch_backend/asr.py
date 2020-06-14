@@ -335,9 +335,9 @@ class CustomPGMUpdater(CustomUpdater):
     def pgm_update(self):
         for idx, m in enumerate(self.model.modules()):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-                self.lipschiz_constraint(m.weight, self.pretrain[idx])
+                m.weight.data = (self.lipschiz_constraint(m.weight, self.pretrain[idx])).data
             elif isinstance(m, nn.BatchNorm2d):
-                self.bn_lipschitz_constraint(m.weight, m.running_var, self.pretrain[idx])
+                m.weight.data = (self.bn_lipschitz_constraint(m.weight, m.running_var, self.pretrain[idx])).data
 
     def update_core(self):
         """Main update routine of the CustomUpdater."""
