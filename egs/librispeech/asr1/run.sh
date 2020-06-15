@@ -2,22 +2,21 @@
 
 # Copyright 2017 Johns Hopkins University (Shinji Watanabe)
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
-
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 . ./path.sh || exit 1;
 . ./cmd.sh || exit 1;
 
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 # general configuration
 backend=pytorch
-stage=4       # start from -1 if you need to start from data download
+stage=0        # start from -1 if you need to start from data download
 stop_stage=100
 ngpu=8         # number of gpus ("0" uses cpu, otherwise use gpu)
 nj=32
 debugmode=1
 dumpdir=dump   # directory to dump full features
 N=0            # number of minibatches to be used (mainly for debugging). "0" uses all minibatches.
-verbose=0      # verbose option
-resume=exp/train_100_espnet_pytorch_train_specaug/results/snapshot.ep.10        # Resume the training from snapshot
+verbose=1      # verbose option
+resume=        # Resume the training from snapshot
 
 # feature configuration
 do_delta=false
@@ -37,7 +36,7 @@ recog_model=model.acc.best  # set a model to be used for decoding: 'model.acc.be
 lang_model=rnnlm.model.best # set a language model to be used for decoding
 
 # model average realted (only for transformer)
-n_average=1                  # the number of ASR models to be averaged
+n_average=5                  # the number of ASR models to be averaged
 use_valbest_average=true     # if true, the validation `n_average`-best ASR models will be averaged.
                              # if false, the last `n_average` ASR models will be averaged.
 lm_n_average=0               # the number of languge models to be averaged
@@ -67,7 +66,7 @@ set -e
 set -u
 set -o pipefail
 
-train_set=train_100_espnet
+train_set=train_960
 train_dev=dev
 recog_set="test_clean test_other dev_clean dev_other"
 
@@ -82,7 +81,7 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
     ### Task dependent. You have to make data the following preparation part by yourself.
     ### But you can utilize Kaldi recipes in most cases
     echo "stage 0: Data preparation"
-    for part in dev-clean test-clean dev-other test-other train-clean-100; do
+    for part in dev-clean test-clean dev-other test-other train-clean-100 train-clean-360 train-other-500; do
         # use underscore-separated names in data directories.
         local/data_prep.sh ${datadir}/LibriSpeech/${part} data/${part//-/_}
     done
@@ -96,13 +95,13 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     echo "stage 1: Feature Generation"
     fbankdir=fbank
     # Generate the fbank features; by default 80-dimensional fbanks with pitch on each frame
-    for x in dev_clean test_clean dev_other test_other train_clean_100; do
+    for x in dev_clean test_clean dev_other test_other train_clean_100 train_clean_360 train_other_500; do
         steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj ${nj} --write_utt2num_frames true \
             data/${x} exp/make_fbank/${x} ${fbankdir}
         utils/fix_data_dir.sh data/${x}
     done
 
-    utils/combine_data.sh --extra_files utt2num_frames data/${train_set}_org data/train_clean_100
+    utils/combine_data.sh --extra_files utt2num_frames data/${train_set}_org data/train_clean_100 data/train_clean_360 data/train_other_500
     utils/combine_data.sh --extra_files utt2num_frames data/${train_dev}_org data/dev_clean data/dev_other
 
     # remove utt having more than 3000 frames
