@@ -572,6 +572,8 @@ def torch_resume(snapshot_path, trainer):
     d = NpzDeserializer(snapshot_dict["trainer"])
     d.load(trainer)
 
+    init_none = {}
+
     try:
 
         print('Loading the state dict using the official function!')
@@ -598,7 +600,7 @@ def torch_resume(snapshot_path, trainer):
         model_dict = trainer.updater.model.state_dict()
         pretrained_dict = snapshot_dict["model"]
         updated_dict = {}
-        init_none = {}
+
         # 1. filter out unnecessary keys
         for k, v in model_dict.items():
             if k in pretrained_dict and v.size() == pretrained_dict[k].size():
