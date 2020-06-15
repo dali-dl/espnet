@@ -15,7 +15,7 @@ ngpu=8         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
 dumpdir=dump   # directory to dump full features
 N=0            # number of minibatches to be used (mainly for debugging). "0" uses all minibatches.
-verbose=1      # verbose option
+verbose=0      # verbose option
 resume=../../librispeech/asr1/exp/train_100_espnet_pytorch_train_specaug/results/snapshot.ep.100        # Resume the training from snapshot
 
 # feature configuration
@@ -48,7 +48,7 @@ set -e
 set -u
 set -o pipefail
 
-train_set=train_sp_train_ondev_ftflibri_pgm
+train_set=train_sp_train_ontrain_ftlibri_pgm
 train_dev=dev
 recog_set="dev test"
 
@@ -81,7 +81,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     fbankdir=fbank
     # Generate the fbank features; by default 80-dimensional fbanks with pitch on each frame
     steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 32 --write_utt2num_frames true \
-        data/dev exp/make_fbank/train ${fbankdir}
+        data/train exp/make_fbank/train ${fbankdir}
     utils/fix_data_dir.sh data/train
     steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 10 --write_utt2num_frames true \
         data/dev exp/make_fbank/dev ${fbankdir}
@@ -91,9 +91,9 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     utils/fix_data_dir.sh data/test
 
     # speed-perturbed
-    utils/perturb_data_dir_speed.sh 0.9 data/dev data/temp1
-    utils/perturb_data_dir_speed.sh 1.0 data/dev data/temp2
-    utils/perturb_data_dir_speed.sh 1.1 data/dev data/temp3
+    utils/perturb_data_dir_speed.sh 0.9 data/train data/temp1
+    utils/perturb_data_dir_speed.sh 1.0 data/train data/temp2
+    utils/perturb_data_dir_speed.sh 1.1 data/train data/temp3
     utils/combine_data.sh --extra-files utt2uniq data/${train_set} data/temp1 data/temp2 data/temp3
     rm -r data/temp1 data/temp2 data/temp3
     steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 32 --write_utt2num_frames true \
