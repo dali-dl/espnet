@@ -15,7 +15,7 @@ ngpu=8         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
 dumpdir=dump   # directory to dump full features
 N=0            # number of minibatches to be used (mainly for debugging). "0" uses all minibatches.
-verbose=0      # verbose option
+verbose=1      # verbose option
 resume=../../librispeech/asr1/exp/train_100_espnet_pytorch_train_specaug/results/snapshot.ep.100        # Resume the training from snapshot
 
 # feature configuration
