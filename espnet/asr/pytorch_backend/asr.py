@@ -276,11 +276,12 @@ class CustomPGMUpdater(CustomUpdater):
         self.linf = linf
 
     def cache_init(self):
+        from copy import deepcopy
 
         self.pretrain = {}
         for idx, m in enumerate(self.model.modules()):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.Linear):
-                self.pretrain[idx] = m
+                self.pretrain[idx] = deepcopy(m)
                 if m.weight in self.init_none.keys():
                     self.pretrain[idx] = None
 
@@ -812,7 +813,7 @@ def train(args):
         init_none = torch_resume(args.resume, trainer)
 
         if args.pgm:
-            print("set pretrained state dict")
+            print("set init none state dict")
             updater.set_init_none(init_none)
             updater.cache_init()
 
