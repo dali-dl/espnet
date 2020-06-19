@@ -52,7 +52,7 @@ set -e
 set -u
 set -o pipefail
 
-train_set=train_sp_train_ontrain_ftlibri
+train_set=train_sp_train_ontrain_ftlibri_0619
 train_dev=dev
 recog_set="dev test"
 
