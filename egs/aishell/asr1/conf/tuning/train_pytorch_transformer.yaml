@@ -26,7 +26,7 @@ opt: noam
 accum-grad: 8
 grad-clip: 5
 patience: 0
-epochs: 110
+epochs: 150
 dropout-rate: 0.1
 
 # transformer specific setting
@@ -40,6 +40,6 @@ transformer-length-normalized-loss: false
 transformer-init: pytorch
 
 #pgm fine tune
-pgm: True
+pgm: False
 max-k: 1e-2
 
